@@ -20,10 +20,32 @@ export default function HomePage() {
 
   const hasMore = repos.length < totalCount;
 
+  const loadRepos = async (searchUsername: string, sortValue: string, pageNum: number) => {
+    setIsLoadingRepos(true);
+    try {
+      const startTime = Date.now();
+      const res = await fetch(`/api/github/repos?username=${encodeURIComponent(searchUsername)}&page=${pageNum}&sort=${sortValue}`);
+      const data = await res.json();
+      
+      const elapsed = Date.now() - startTime;
+      const delay = elapsed < 500 ? 500 - elapsed : 0;
+      
+      if (delay > 0) {
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+      
+      return data;
+    } catch (err) {
+      console.error("Failed to load repos:", err);
+      return { repos: [] };
+    } finally {
+      setIsLoadingRepos(false);
+    }
+  };
+
   const handleSearch = async (searchUsername: string) => {
     setUsername(searchUsername);
     setIsLoadingUser(true);
-    setIsLoadingRepos(true);
     setError(null);
     setUser(null);
     setRepos([]);
@@ -40,7 +62,6 @@ export default function HomePage() {
           setError("User not found");
         }
         setIsLoadingUser(false);
-        setIsLoadingRepos(false);
         return;
       }
 
@@ -49,10 +70,8 @@ export default function HomePage() {
       setTotalCount(userData.public_repos || 0);
       setIsLoadingUser(false);
 
-      const reposRes = await fetch(`/api/github/repos?username=${encodeURIComponent(searchUsername)}&page=1&sort=updated`);
-      const reposData = await reposRes.json();
+      const reposData = await loadRepos(searchUsername, "updated", 1);
       setRepos(reposData.repos || []);
-      setIsLoadingRepos(false);
 
       setTimeout(() => {
         resultsRef.current?.focus();
@@ -61,42 +80,27 @@ export default function HomePage() {
       setError("An error occurred. Please try again.");
       console.error(err);
       setIsLoadingUser(false);
-      setIsLoadingRepos(false);
     }
   };
 
   const loadMoreRepos = async () => {
     if (isLoadingRepos || !hasMore) return;
     
-    setIsLoadingRepos(true);
-    try {
-      const nextPage = page + 1;
-      const res = await fetch(`/api/github/repos?username=${encodeURIComponent(username)}&page=${nextPage}&sort=${sort}`);
-      const data = await res.json();
-      if (data.repos && data.repos.length > 0) {
-        setRepos((prev) => [...prev, ...data.repos]);
-        setPage(nextPage);
-      }
-    } catch (err) {
-      console.error("Failed to load more repos:", err);
+    const nextPage = page + 1;
+    const data = await loadRepos(username, sort, nextPage);
+    if (data.repos && data.repos.length > 0) {
+      setRepos((prev) => [...prev, ...data.repos]);
+      setPage(nextPage);
     }
-    setIsLoadingRepos(false);
   };
 
   const handleSortChange = async (newSort: "updated" | "stars") => {
     setSort(newSort);
     setPage(1);
-    setIsLoadingRepos(true);
-    try {
-      const res = await fetch(`/api/github/repos?username=${encodeURIComponent(username)}&page=1&sort=${newSort}`);
-      const data = await res.json();
-      if (data.repos) {
-        setRepos(data.repos);
-      }
-    } catch (err) {
-      console.error("Failed to sort repos:", err);
+    const data = await loadRepos(username, newSort, 1);
+    if (data.repos) {
+      setRepos(data.repos);
     }
-    setIsLoadingRepos(false);
   };
 
   return (
