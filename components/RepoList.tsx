@@ -1,55 +1,16 @@
-"use client";
-
-import { useState } from "react";
 import { GitHubRepo } from "@/lib/types";
 
 interface RepoListProps {
-  username: string;
-  initialRepos: GitHubRepo[];
+  repos: GitHubRepo[];
   totalCount: number;
+  sort: "updated" | "stars";
   hasMore: boolean;
+  isLoading: boolean;
+  onSortChange: (sort: "updated" | "stars") => void;
+  onLoadMore: () => void;
 }
 
-export function RepoList({ username, initialRepos, totalCount, hasMore: initialHasMore }: RepoListProps) {
-  const [repos, setRepos] = useState<GitHubRepo[]>(initialRepos);
-  const [sort, setSort] = useState<"updated" | "stars">("updated");
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(initialHasMore);
-  const [isLoading, setIsLoading] = useState(false);
-
-  const loadMore = async () => {
-    setIsLoading(true);
-    try {
-      const res = await fetch(`/api/github/repos?username=${encodeURIComponent(username)}&page=${page + 1}&sort=${sort}`);
-      const data = await res.json();
-      if (data.repos) {
-        setRepos((prev) => [...prev, ...data.repos]);
-        setPage((p) => p + 1);
-        setHasMore(data.hasMore);
-      }
-    } catch (err) {
-      console.error("Failed to load more repos:", err);
-    }
-    setIsLoading(false);
-  };
-
-  const handleSortChange = async (newSort: "updated" | "stars") => {
-    setSort(newSort);
-    setPage(1);
-    setIsLoading(true);
-    try {
-      const res = await fetch(`/api/github/repos?username=${encodeURIComponent(username)}&page=1&sort=${newSort}`);
-      const data = await res.json();
-      if (data.repos) {
-        setRepos(data.repos);
-        setHasMore(data.hasMore);
-      }
-    } catch (err) {
-      console.error("Failed to sort repos:", err);
-    }
-    setIsLoading(false);
-  };
-
+export function RepoList({ repos, totalCount, sort, hasMore, isLoading, onSortChange, onLoadMore }: RepoListProps) {
   return (
     <section aria-label="Repositories">
       <div className="flex items-center justify-between mb-4">
@@ -57,7 +18,7 @@ export function RepoList({ username, initialRepos, totalCount, hasMore: initialH
         <select
           id="sort-select"
           value={sort}
-          onChange={(e) => handleSortChange(e.target.value as "updated" | "stars")}
+          onChange={(e) => onSortChange(e.target.value as "updated" | "stars")}
           disabled={isLoading}
           className="px-2 py-1 border border-gray-300 bg-white text-sm"
         >
@@ -89,7 +50,7 @@ export function RepoList({ username, initialRepos, totalCount, hasMore: initialH
       </div>
       {hasMore && (
         <button
-          onClick={loadMore}
+          onClick={onLoadMore}
           disabled={isLoading}
           className="mt-4 px-4 py-2 bg-gray-900 text-white text-sm disabled:bg-gray-300"
         >

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { githubHeaders, parseJsonSafely } from "@/lib/github";
+import { githubHeaders, parseJsonSafely } from "../../../../lib/github";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -12,9 +12,8 @@ export async function GET(req: Request) {
   }
 
   try {
-    const sortParam = sort === "stars" ? "stars" : "updated";
-    const perPage = 20;
-    const url = `https://api.github.com/users/${encodeURIComponent(username)}/repos?page=${page}&per_page=${perPage}&sort=${sortParam}&order=desc`;
+    const perPage = 30;
+    const url = `https://api.github.com/users/${encodeURIComponent(username)}/repos?page=${page}&per_page=${perPage}&sort=updated&order=desc`;
 
     const res = await fetch(url, {
       headers: githubHeaders(),
@@ -30,16 +29,14 @@ export async function GET(req: Request) {
       );
     }
 
-    const repos = data || [];
-    const totalCount = parseInt(res.headers.get("x-total-count") || "0", 10);
+    let repos = data || [];
 
-    console.log({ repos, data, totalCount }, "repos");
-    
+    if (sort === "stars") {
+      repos = repos.sort((a: any, b: any) => b.stargazers_count - a.stargazers_count);
+    }
 
     return NextResponse.json({
-      repos,
-      totalCount,
-      hasMore: page * perPage < totalCount
+      repos
     });
   } catch {
     return NextResponse.json({ error: "Network failure" }, { status: 502 });

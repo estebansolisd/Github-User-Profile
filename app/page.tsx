@@ -11,23 +11,27 @@ export default function HomePage() {
   const [user, setUser] = useState<GitHubUser | null>(null);
   const [repos, setRepos] = useState<GitHubRepo[]>([]);
   const [totalCount, setTotalCount] = useState(0);
-  const [hasMore, setHasMore] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [sort, setSort] = useState<"updated" | "stars">("updated");
+  const [isLoadingUser, setIsLoadingUser] = useState(false);
+  const [isLoadingRepos, setIsLoadingRepos] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
 
+  const hasMore = repos.length < totalCount;
+
   const handleSearch = async (searchUsername: string) => {
     setUsername(searchUsername);
-    setLoading(true);
+    setIsLoadingUser(true);
+    setIsLoadingRepos(true);
     setError(null);
     setUser(null);
     setRepos([]);
+    setPage(1);
+    setSort("updated");
 
     try {
-      const [userRes, reposRes] = await Promise.all([
-        fetch(`/api/github/user?username=${encodeURIComponent(searchUsername)}`),
-        fetch(`/api/github/repos?username=${encodeURIComponent(searchUsername)}&page=1&sort=updated`),
-      ]);
+      const userRes = await fetch(`/api/github/user?username=${encodeURIComponent(searchUsername)}`);
 
       if (!userRes.ok) {
         if (userRes.status === 502) {
@@ -35,18 +39,20 @@ export default function HomePage() {
         } else {
           setError("User not found");
         }
-        setLoading(false);
+        setIsLoadingUser(false);
+        setIsLoadingRepos(false);
         return;
       }
 
       const userData = await userRes.json();
       setUser(userData);
+      setTotalCount(userData.public_repos || 0);
+      setIsLoadingUser(false);
 
+      const reposRes = await fetch(`/api/github/repos?username=${encodeURIComponent(searchUsername)}&page=1&sort=updated`);
       const reposData = await reposRes.json();
-      
       setRepos(reposData.repos || []);
-      setTotalCount(reposData.totalCount || 0);
-      setHasMore(reposData.hasMore || false);
+      setIsLoadingRepos(false);
 
       setTimeout(() => {
         resultsRef.current?.focus();
@@ -54,9 +60,43 @@ export default function HomePage() {
     } catch (err) {
       setError("An error occurred. Please try again.");
       console.error(err);
+      setIsLoadingUser(false);
+      setIsLoadingRepos(false);
     }
+  };
 
-    setLoading(false);
+  const loadMoreRepos = async () => {
+    if (isLoadingRepos || !hasMore) return;
+    
+    setIsLoadingRepos(true);
+    try {
+      const nextPage = page + 1;
+      const res = await fetch(`/api/github/repos?username=${encodeURIComponent(username)}&page=${nextPage}&sort=${sort}`);
+      const data = await res.json();
+      if (data.repos && data.repos.length > 0) {
+        setRepos((prev) => [...prev, ...data.repos]);
+        setPage(nextPage);
+      }
+    } catch (err) {
+      console.error("Failed to load more repos:", err);
+    }
+    setIsLoadingRepos(false);
+  };
+
+  const handleSortChange = async (newSort: "updated" | "stars") => {
+    setSort(newSort);
+    setPage(1);
+    setIsLoadingRepos(true);
+    try {
+      const res = await fetch(`/api/github/repos?username=${encodeURIComponent(username)}&page=1&sort=${newSort}`);
+      const data = await res.json();
+      if (data.repos) {
+        setRepos(data.repos);
+      }
+    } catch (err) {
+      console.error("Failed to sort repos:", err);
+    }
+    setIsLoadingRepos(false);
   };
 
   return (
@@ -64,7 +104,7 @@ export default function HomePage() {
       <h1 className="text-xl font-medium mb-1">GitHub Profile Explorer</h1>
       <p className="text-sm text-gray-500 mb-6">Search for a GitHub user to view their profile and repositories.</p>
 
-      <SearchUser onSearch={handleSearch} isLoading={loading} error={error} />
+      <SearchUser onSearch={handleSearch} isLoading={isLoadingUser} error={error} />
 
       <div ref={resultsRef} tabIndex={-1}>
         {user && (
@@ -72,10 +112,13 @@ export default function HomePage() {
             <UserProfile user={user} />
             <div className="mt-6">
               <RepoList
-                username={username}
-                initialRepos={repos}
+                repos={repos}
                 totalCount={totalCount}
+                sort={sort}
                 hasMore={hasMore}
+                isLoading={isLoadingRepos}
+                onSortChange={handleSortChange}
+                onLoadMore={loadMoreRepos}
               />
             </div>
           </div>
